@@ -1,0 +1,21 @@
+# FastAPI and web server
+fastapi==0.115.5
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20
+
+# Anthropic Claude API
+anthropic==0.40.0
+
+# Document processing (NO POPPLER NEEDED!)
+PyMuPDF==1.24.0
+Pillow==11.0.0
+requests==2.32.3
+
+# Data validation
+pydantic==2.10.3
+
+# Deduplication
+rapidfuzz==3.10.1
+
+# Environment management
+python-dotenv==1.0.1

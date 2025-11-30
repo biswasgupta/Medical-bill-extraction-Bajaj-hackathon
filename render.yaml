@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: bajaj-health-datathon
+    env: python
+    region: oregon
+    plan: free
+    buildCommand: "pip install --no-cache-dir -r requirements.txt"
+    startCommand: "uvicorn main:app --host 0.0.0.0 --port $PORT --workers 1"
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+    autoDeploy: true
