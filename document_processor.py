@@ -35,34 +35,70 @@ class DocumentProcessor:
             Tuple of (file_path, file_type)
         """
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Accept': 'application/pdf,application/octet-stream,image/*,*/*',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1'
         }
 
         last_error = None
         for attempt in range(max_retries):
             try:
                 print(f"📡 Download attempt {attempt + 1}/{max_retries}...")
-                response = requests.get(url, timeout=Config.DOWNLOAD_TIMEOUT, headers=headers, allow_redirects=True)
+                print(f"🔗 URL: {url}")
+
+                # Create a session to handle cookies and redirects better
+                session = requests.Session()
+                session.headers.update(headers)
+
+                response = session.get(url, timeout=Config.DOWNLOAD_TIMEOUT, allow_redirects=True, stream=True)
+
+                # Log response details
+                print(f"📊 Status Code: {response.status_code}")
+                print(f"🔄 Final URL after redirects: {response.url}")
+
                 response.raise_for_status()
 
-                # Check if content is empty
-                if not response.content or len(response.content) == 0:
-                    raise Exception("Downloaded file is empty (0 bytes)")
-
-                # Log download details
-                content_length = len(response.content)
-                print(f"📦 Downloaded {content_length} bytes")
+                # Check content-length header
+                expected_length = response.headers.get('content-length')
+                if expected_length:
+                    expected_length = int(expected_length)
+                    print(f"📏 Content-Length header: {expected_length} bytes")
+                    if expected_length == 0:
+                        raise Exception("Server reports content-length is 0 bytes")
 
                 # Determine file type from content-type or URL
                 content_type = response.headers.get('content-type', '').lower()
                 print(f"📄 Content-Type: {content_type}")
 
+                # Read content with streaming
+                content = b''
+                chunk_size = 8192
+                for chunk in response.iter_content(chunk_size=chunk_size):
+                    if chunk:
+                        content += chunk
+
+                # Check if content is empty after download
+                if not content or len(content) == 0:
+                    raise Exception("Downloaded file is empty (0 bytes)")
+
+                # Log download details
+                content_length = len(content)
+                print(f"📦 Downloaded {content_length} bytes")
+
+                # Verify content-length matches if header was present
+                if expected_length and content_length != expected_length:
+                    print(f"⚠️ Warning: Downloaded {content_length} bytes but Content-Length header said {expected_length} bytes")
+
                 # Check if we got HTML instead of the expected file type
-                if 'html' in content_type or response.content[:15].lower().startswith(b'<!doctype html') or response.content[:6].lower().startswith(b'<html'):
+                if 'html' in content_type or content[:15].lower().startswith(b'<!doctype html') or content[:6].lower().startswith(b'<html'):
                     raise Exception(f"Server returned HTML instead of a document. This could indicate: "
-                                    f"1) The URL is incorrect, 2) The file requires authentication, "
+                                    f"1) The URL is incorrect or requires authentication, "
+                                    f"2) The file has been moved or deleted, "
                                     f"3) The server is blocking automated requests. "
-                                    f"Content preview: {response.content[:200]}")
+                                    f"Content preview: {content[:500].decode('utf-8', errors='ignore')}")
 
                 if 'pdf' in content_type or url.lower().endswith('.pdf'):
                     file_ext = 'pdf'
@@ -75,7 +111,7 @@ class DocumentProcessor:
                 # Save to temp file
                 temp_file = os.path.join(self.temp_dir, f"document.{file_ext}")
                 with open(temp_file, 'wb') as f:
-                    f.write(response.content)
+                    f.write(content)
 
                 # Verify file was written correctly
                 file_size = os.path.getsize(temp_file)

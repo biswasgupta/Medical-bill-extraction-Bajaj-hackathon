@@ -214,6 +214,66 @@ def debug_config():
     }
 
 
+@app.post("/debug/test-url")
+async def test_url_download(request: dict):
+    """
+    Debug endpoint to test if a URL can be downloaded
+
+    Request body:
+        {"url": "https://example.com/document.pdf"}
+
+    Returns detailed diagnostics about the download attempt
+    """
+    url = request.get("url")
+    if not url:
+        raise HTTPException(status_code=400, detail="URL is required")
+
+    processor = DocumentProcessor()
+
+    try:
+        print(f"🧪 Testing URL download: {url}")
+        file_path, file_type = processor.download_document(url)
+
+        import os
+        file_size = os.path.getsize(file_path)
+
+        # Try to get PDF info if it's a PDF
+        pdf_info = None
+        if file_type == 'pdf':
+            try:
+                images = processor.pdf_to_images(file_path)
+                pdf_info = {
+                    "page_count": len(images),
+                    "conversion_successful": True
+                }
+            except Exception as pdf_error:
+                pdf_info = {
+                    "page_count": 0,
+                    "conversion_successful": False,
+                    "error": str(pdf_error)
+                }
+
+        result = {
+            "success": True,
+            "url": url,
+            "file_type": file_type,
+            "file_size_bytes": file_size,
+            "file_path": file_path,
+            "pdf_info": pdf_info
+        }
+
+        processor.cleanup()
+        return result
+
+    except Exception as e:
+        processor.cleanup()
+        return {
+            "success": False,
+            "url": url,
+            "error": str(e)
+        }
+
+
 # Run with: uvicorn main:app --reload --host 0.0.0.0 --port 8000
 if __name__ == "__main__":
     import uvicorn
